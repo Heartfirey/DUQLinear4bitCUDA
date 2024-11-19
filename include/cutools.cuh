@@ -1,8 +1,10 @@
 #pragma once
 #include <stdio.h>
 #include <common.h>
+#include <cuda_fp16.h>
+#include <cuda_bf16.h>
 
-#define CHECK(call)                                   \
+#define CHECK_EXEC(call)                              \
 do                                                    \
 {                                                     \
     const cudaError_t error_code = call;              \
@@ -39,7 +41,7 @@ T *NewTensor(uint32_t *shape, uint32_t dimensions)
     uint32_t sizeInBytes = totElements * sizeof(T);
     // call cudaMalloc
     T *dTensor;
-    CHECK(cudaMalloc((void **)&dTensor, sizeInBytes));
+    CHECK_EXEC(cudaMalloc((void **)&dTensor, sizeInBytes));
 
     return dTensor;
 }
@@ -57,9 +59,23 @@ T *NewTensorFromHost(const T *hostData, uint32_t *shape, uint32_t dimensions)
     uint32_t sizeInBytes = totElements * sizeof(T);
     // call cudaMalloc
     T *dTensor;
-    CHECK(cudaMalloc((void **)&dTensor, sizeInBytes));
+    CHECK_EXEC(cudaMalloc((void **)&dTensor, sizeInBytes));
     // call cudaMemcpy
-    CHECK(cudaMemcpy(dTensor, hostData, sizeInBytes, cudaMemcpyHostToDevice));
+    CHECK_EXEC(cudaMemcpy(dTensor, hostData, sizeInBytes, cudaMemcpyHostToDevice));
     
     return dTensor;
 }
+
+template <typename T>
+half *NewFP16TensorFromHost(const T *hostData, uint32_t *shape, uint32_t dimensions)
+{
+    uint32_t totElements = 1;
+    for (uint32_t i = 0; i < dimensions; i++)
+    {
+        totElements *= shape[i];
+    }
+
+    half *dTensor;
+    CHECK_EXEC(cudaMalloc((void **)&dTensor, totElements * sizeof(half)));
+}
+

@@ -4,11 +4,63 @@
 #include <cutlass/cutlass.h>
 #include <cutlass/gemm/gemm.h>
 #include <cutlass/epilogue/thread/linear_combination.h>
+// cuda random
+#include <curand.h>
+#include <cuda_fp16.h>
 // quarot gemm
+#include <common.h>
 #include <gemm.h>
+#include <quant.h>
+#include <quant_tensor.h>
+#include <torch/all.h>
+#include <logger.h>
+
+class Linear : public torch::nn::Module
+{
+public:
+    torch::Tensor weight;
+    torch::Tensor bias;
+
+    Linear(uint32_t input_dim, uint32_t output_dim, bool bias, torch::Dtype dtype);
+    // ~Linear();
+
+    torch::Tensor forward(torch::Tensor input);
+};
+
+
+class Linear4bit : public torch::nn::Module
+{
+public:
+    torch::Tensor weight;
+    torch::Tensor weight_scale;
+    torch::Tensor bias;
+
+    Linear4bit(uint32_t input_dim, uint32_t output_dim, bool bias, torch::Dtype dtype=torch::kFloat16);
+    // ~Linear4bit();
+
+    torch::Tensor forward(PackedQuantizedTensor input);
+    static Linear4bit from_float(Linear &linear, torch::Tensor weight_scales);
+    static Linear4bit from_float(torch::nn::Linear &linear, torch::Tensor weight_scales);
+};
+
+// Linea4bit module with dual uniform quantization
+class Linear4bitDUQ : public torch::nn::Module
+{
+public:
+    torch::Tensor weight;
+    torch::Tensor weight_scale_1;
+    torch::Tensor weight_scale_2;
+    torch::Tensor bias;
+
+    Linear4bitDUQ(uint32_t input_dim, uint32_t output_dim, bool bias, torch::Dtype dtype=torch::kFloat16);
+
+    torch::Tensor forward(PackedQuantizedTensor input);
+    static Linear4bitDUQ from_float(Linear &linear, torch::Tensor weight_scales_1, torch::Tensor weight_scales_2);
+    static Linear4bitDUQ from_float(torch::nn::Linear &linear, torch::Tensor weight_scales_1, torch::Tensor weight_scales_2);
+};
 
 template <typename T>
-class Linear
+class LinearPlain
 {
 public:
     uint32_t input_dim;
@@ -16,9 +68,9 @@ public:
     bool use_bias;
 
     T *weight;
-    T *bias;
+    float *bias;
 
-    Linear(uint32_t input_dim, uint32_t output_dim, bool use_bias)
+    LinearPlain(uint32_t input_dim, uint32_t output_dim, bool use_bias)
         : input_dim(input_dim), output_dim(output_dim), use_bias(use_bias)
     {
         uint32_t weight_size = input_dim * output_dim * sizeof(T);
@@ -36,7 +88,7 @@ public:
         }
     }
 
-    ~Linear()
+    ~LinearPlain()
     {
         cudaFree(weight);
         if (use_bias)
@@ -75,3 +127,9 @@ public:
         }
     }
 };
+
+// TODO: implement Linear4bitPlain
+// class Linear4bitPlain
+// {
+
+// };

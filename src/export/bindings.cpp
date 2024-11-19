@@ -19,7 +19,7 @@ torch::Tensor matmul(const torch::Tensor &A, const torch::Tensor &B)
     uint32_t K = A.size(1) * kElementsPerVector;  // 4bit packing is on the columns
     auto C = torch::empty({M, N}, torch::dtype(torch::kInt32).device(A.device()));
 
-    matmul_host(A.data_ptr<Int4Storage>(), B.data_ptr<Int4Storage>(), M, N, K, C.data_ptr<int32_t>());
+    matmul_host_4bit(A.data_ptr<Int4Storage>(), B.data_ptr<Int4Storage>(), M, N, K, C.data_ptr<int32_t>());
 
     return C;
 }
@@ -39,6 +39,28 @@ torch::Tensor sym_quant(const torch::Tensor &x, const torch::Tensor &scale)
     auto q = torch::empty({rows, colsDst},torch::dtype(torch::kUInt8).device(x.device()));
 
     sym_quant_host((half*)x.data_ptr(), (half*)scale.data_ptr(), rows, colsSrc, colsDst, q.data_ptr<Int4Storage>());
+
+    return q;
+}
+
+torch::Tensor sym_double_quant(const torch::Tensor &x, const torch::Tensor &scale_1, const torch::Tensor &scale_2)
+{
+    torch::checkAllContiguous("sym_double_quant", {{x,     "x",     0},
+                                                      {scale_1, "scale_1", 1},
+                                                      {scale_2, "scale_2", 2}});
+    torch::checkDeviceType("sym_double_quant", {x, scale_1, scale_2}, at::DeviceType::CUDA);
+
+    torch::checkSameGPU("sym_double_quant", {x, "x", 0}, {scale_1, "scale_1", 1});
+    torch::checkSameGPU("sym_double_quant", {x, "x", 0}, {scale_2, "scale_2", 2});
+    torch::checkSize("sym_double_quant", torch::TensorArg{scale_1, "scale_1", 1}, 0, x.size(0));
+    torch::checkSize("sym_double_quant", torch::TensorArg{scale_2, "scale_2", 2}, 0, x.size(0));
+    uint32_t rows = x.size(0);
+    uint32_t colsSrc = x.size(1);
+    uint32_t colsDst = cdiv(colsSrc, kElementsPerVector);
+
+    auto q = torch::empty({rows, colsDst},torch::dtype(torch::kUInt8).device(x.device()));
+
+    sym_double_quant_host((half*)x.data_ptr(), (half*)scale_1.data_ptr(), (half*)scale_2.data_ptr(), rows, colsSrc, colsDst, q.data_ptr<Int4Storage>());
 
     return q;
 }
@@ -77,6 +99,53 @@ torch::Tensor sym_dequant(const torch::Tensor &q,
     {
         case 32:
             sym_dequant_host(q.data_ptr<int32_t>(), (half*)scale_row.data_ptr(), (half*)scale_col.data_ptr(),
+                    rows, cols, (half*)x.data_ptr());
+            break;
+        default:
+            TORCH_CHECK(false, "Unsupported data type")
+    }
+
+    return x;
+}
+
+torch::Tensor sym_double_dequant(const torch::Tensor &q,
+                                     const torch::Tensor &scale_row,
+                                     const torch::Tensor &scale_col_1,
+                                     const torch::Tensor &scale_col_2,
+                                     const int bits)
+{
+    torch::checkAllContiguous("sym_double_dequant",
+                              {{q,         "q",         0},
+                               {scale_row, "scale_row", 1},
+                               {scale_col_1, "scale_col_1", 2},
+                               {scale_col_2, "scale_col_2", 3}
+                              });
+    torch::checkDeviceType("sym_double_dequant", {q, scale_row, scale_col_1, scale_col_2},
+                           at::DeviceType::CUDA);
+
+    torch::checkAllSameGPU("sym_double_dequant",
+                           {{q,         "q",         0},
+                            {scale_row, "scale_row", 1},
+                            {scale_col_1, "scale_col_1", 2},
+                            {scale_col_2, "scale_col_2", 3}
+                           });
+
+    uint32_t rows = q.size(0);
+    uint32_t cols = q.size(1);
+
+    torch::checkSize("sym_double_dequant", torch::TensorArg{scale_row, "scale_row", 1}, 0,
+                     rows);
+    torch::checkSize("sym_double_dequant", torch::TensorArg{scale_col_1, "scale_col_1", 2}, 0,
+                     cols);
+    torch::checkSize("sym_double_dequant", torch::TensorArg{scale_col_2, "scale_col_2", 3}, 0,
+                     cols);
+
+    auto x = torch::empty(q.sizes(), torch::dtype(torch::kHalf).device(q.device()));
+
+    switch (bits)
+    {
+        case 32:
+            sym_double_dequant_host(q.data_ptr<int32_t>(), (half*)scale_row.data_ptr(), (half*)scale_col_1.data_ptr(), (half*)scale_col_2.data_ptr(),
                     rows, cols, (half*)x.data_ptr());
             break;
         default:
@@ -398,6 +467,14 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m
           "output = int4Packing(int4Rounding(source / scale)\n",
           py::arg("x"), py::arg("scale"));
 
+    m.def("sym_double_quant", &sym_double_quant,
+            "input: (src: torch.Tensor(M x N, FP16, CUDA), scale_1: "
+            "torch.Tensor(M x 1, FP16, CUDA), scale_2: torch.Tensor(M x 1, FP16, CUDA))"
+            "bits: int\n"
+            "output: torch.Tensor(M x ceil(N / 2), UINT8, CUDA)\n"
+            "output = int4Packing(int4Rounding(source / scale_1 / scale_2)\n",
+            py::arg("x"), py::arg("scale_1"), py::arg("scale_2"));
+
     m.def("sym_dequant", &sym_dequant,
           "input (x: torch.Tensor(M x N), scale_row: torch.Tensor(M x 1, "
           "FP16), scale_col: torch.Tensor(1 x N, FP16)"
@@ -412,6 +489,22 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m
           "input x type is int32\n",
           py::arg("q"), py::arg("scale_row"), py::arg("scale_col"),
           py::arg("bits"));
+
+    m.def("sym_double_dequant", &sym_double_dequant,
+            "input (x: torch.Tensor(M x N), scale_row: torch.Tensor(M x 1, "
+            "FP16), scale_col_1: torch.Tensor(1 x N, FP16), scale_col_2: torch.Tensor(1 x N, FP16)"
+            "bits: int\n"
+            "output: torch.Tensor(M x N, FP16)\n"
+            "output = x * scale_row * scale_col_1 * scale_col_2"
+            "when bits equal 8: "
+            "input x type is int8\n"
+            "when bits equal 16: "
+            "input x type is FP16\n"
+            "when bits equal 32: "
+            "input x type is int32\n",
+            py::arg("q"), py::arg("scale_row"), py::arg("scale_col_1"), py::arg("scale_col_2"),
+            py::arg("bits"));
+
     m.def("batch_decode_i4", &batch_decode_i4, "");
     m.def("init_kv_i4", &init_kv_i4, "");
     m.def("append_kv_i4", &append_kv_i4, "");

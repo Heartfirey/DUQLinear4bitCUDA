@@ -2,10 +2,11 @@
 #include <iostream>
 #include <stdexcept>
 #include <cstdint>
+#include <cassert>
 
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
-
+#include <cutools.cuh>
 //#include <cutlass/subbyte_reference.h>
 #include <int4.h>
 
@@ -50,7 +51,7 @@ DEVICE T sqr(T x)
 }
 
 constexpr int qmin = -8;
-constexpr int qmax = 7;
+constexpr int qmax = (7 - 1e-8);    // avoid hit the upper_bound!
 
 
 
