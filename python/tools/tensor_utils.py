@@ -37,7 +37,7 @@ def sym_quant(x, scale):
 def sym_dual_quant(x, scale_1, scale_2):
     assert x.dtype == scale_1.dtype == scale_2.dtype == torch.float16
     x, x_shape_excl_last = flatten_last_dim_and_return_shape(x)
-    return qcu_tool.sym_double_quant(x, scale_1.view(-1), scale_2.view(-1)).view(*x_shape_excl_last, -1)
+    return qcu_tool.sym_dual_quant(x, scale_1.view(-1), scale_2.view(-1)).view(*x_shape_excl_last, -1)
 
 def sym_dequant(q, scale_row, scale_col, bits=32):
     assert q.dtype == torch.int32
@@ -49,14 +49,48 @@ def sym_dual_dequant(q, scale_row, scale_col_1, scale_col_2, bits=32):
     assert q.dtype == torch.int32
     assert scale_row.dtype == scale_col_1.dtype == scale_col_2.dtype == torch.float16
     q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
-    return qcu_tool.sym_double_dequant(q, scale_row.view(-1), scale_col_1, scale_col_2, bits).view(*q_shape_excl_last, -1)
+    return qcu_tool.sym_dual_dequant(q, scale_row.view(-1), scale_col_1, scale_col_2, bits).view(*q_shape_excl_last, -1)
+
+def asym_quant(q, scale, zero):
+    assert q.dtype == torch.float16
+    assert scale.dtype == zero.dtype == torch.float16
+    q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
+    return qcu_tool.asym_quant(q, scale.view(-1), zero.view(-1)).view(*q_shape_excl_last, -1)
+
+def asym_dequant(q, scale_row, zeros_row, scale_col, zeros_col, bits=32):
+    assert q.dtype == torch.int32
+    assert scale_row.dtype == zeros_row.dtype == scale_col.dtype == zeros_col.dtype == torch.float16
+    q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
+    return qcu_tool.asym_dequant(q, scale_row.view(-1), zeros_row.view(-1), scale_col, zeros_col, bits).view(*q_shape_excl_last, -1)
+
+
+def asym_dual_quant(q, scale_1, zeros1, scale_2, zeros2):
+    assert q.dtype == torch.int32
+    assert scale_1.dtype == scale_2.dtype == torch.float16
+    assert zeros1.dtype == zeros2.dtype == torch.float16
+    q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
+    return qcu_tool.asym_dual_quant(q, 
+                                    scale_1.view(-1), zeros1.view(-1), 
+                                    scale_2.view(-1), zeros2.view(-1)).view(*q_shape_excl_last, -1)
+
+def asym_dual_dequant(q, scale_row, zeros_row, scale_col_1, zeros_col_1, scale_col_2, zeros_col_2, bits=32):
+    assert q.dtype == torch.int32
+    assert scale_row.dtype == scale_col_1.dtype == scale_col_2.dtype == torch.float16
+    assert zeros_row.dtype == zeros_col_1.dtype == zeros_col_2.dtype == torch.float16
+    q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
+    return qcu_tool.asym_dual_dequant(q, 
+                                      scale_row.view(-1), zeros_row.view(-1), 
+                                      scale_col_1.view(-1), zeros_col_1.view(-1), 
+                                      scale_col_2.view(-1), zeros_col_2.view(-1), bits).view(*q_shape_excl_last, -1)
 
 class PackedQuantizedTensor:
     def __init__(self, 
                  quantized_x: torch.Tensor, 
-                 scales_x: torch.Tensor):
+                 scales_x: torch.Tensor,
+                 zeros_x: torch.Tensor = None):
         self.quantized_x = quantized_x
         self.scales_x = scales_x
+        self.zeros_x = zeros_x
 
     def size(self):
         return self.quantized_x.size()

@@ -50,8 +50,11 @@ DEVICE T sqr(T x)
     return x * x;
 }
 
-constexpr int qmin = -8;
-constexpr int qmax = (7 - 1e-8);    // avoid hit the upper_bound!
+constexpr int qmin_sym = -8;
+constexpr int qmax_sym = (7 - 1e-8);    // avoid hit the upper_bound!
+
+constexpr int qmin_asym = 0;
+constexpr int qmax_asym = 15;
 
 
 

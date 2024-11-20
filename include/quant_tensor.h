@@ -45,21 +45,18 @@ public:
 
 torch::Tensor sym_quant(const torch::Tensor &x, const torch::Tensor &scale);
 
-torch::Tensor sym_double_quant(const torch::Tensor &x, const torch::Tensor &scale_1, const torch::Tensor &scale_2);
+torch::Tensor sym_dual_quant(const torch::Tensor &x, const torch::Tensor &scale_1, const torch::Tensor &scale_2);
 
 torch::Tensor sym_dequant(const torch::Tensor &q,
                           const torch::Tensor &scale_row,
                           const torch::Tensor &scale_col,
                           const int bits);
 
-torch::Tensor sym_double_dequant(const torch::Tensor &q,
+torch::Tensor sym_dual_dequant(const torch::Tensor &q,
                                  const torch::Tensor &scale_row,
                                  const torch::Tensor &scale_col_1,
                                  const torch::Tensor &scale_col_2,
                                  const int bits);
-
-// torch::Tensor sym_double_dequant(const torch::Tensor &q,
-//                                  const torch::Tensor &scale_row)
 
 class Quantizer4bit : public torch::nn::Module
 {

@@ -234,7 +234,7 @@ torch::Tensor Linear4bitDUQ::forward(PackedQuantizedTensor input)
     assert(scale_row.dtype() == scale_col_1.dtype() && scale_col_1.dtype() == scale_col_2.dtype() && scale_row.dtype() == torch::kFloat16);
     auto [res, res_shape_excl_last] = flatten_last_dim_and_return_shape(C);
 
-    res = sym_double_dequant(res, scale_row.view(-1), scale_col_1, scale_col_2, 32);
+    res = sym_dual_dequant(res, scale_row.view(-1), scale_col_1, scale_col_2, 32);
     res = reshape_tensor(res, res_shape_excl_last, -1);
 
     if (this->bias.defined())

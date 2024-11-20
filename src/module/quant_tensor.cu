@@ -28,7 +28,7 @@ torch::Tensor sym_quant(const torch::Tensor &x, const torch::Tensor &scale)
     return q;
 }
 
-torch::Tensor sym_double_quant(const torch::Tensor &x, const torch::Tensor &scale_1, const torch::Tensor &scale_2)
+torch::Tensor sym_dual_quant(const torch::Tensor &x, const torch::Tensor &scale_1, const torch::Tensor &scale_2)
 {
     torch::checkAllContiguous("sym_quant", {{x,       "x",       0},
                                             {scale_1, "scale_1", 1},
@@ -45,7 +45,7 @@ torch::Tensor sym_double_quant(const torch::Tensor &x, const torch::Tensor &scal
 
     auto q = torch::empty({rows, colsDst}, torch::dtype(torch::kUInt8).device(x.device()));
 
-    sym_double_quant_host(/* x       */(half*)x.data_ptr(), 
+    sym_dual_quant_host(/* x       */(half*)x.data_ptr(), 
                           /* scale_1 */(half*)scale_1.data_ptr(),
                           /* scale_2 */(half*)scale_2.data_ptr(),
                           /* rows    */rows, 
@@ -98,21 +98,21 @@ torch::Tensor sym_dequant(const torch::Tensor &q,
     return x;
 }
 
-torch::Tensor sym_double_dequant(const torch::Tensor &q,
+torch::Tensor sym_dual_dequant(const torch::Tensor &q,
                                  const torch::Tensor &scale_row,
                                  const torch::Tensor &scale_col_1,
                                  const torch::Tensor &scale_col_2,
                                  const int bits)
 {
-    torch::checkAllContiguous("sym_double_dequant",
+    torch::checkAllContiguous("sym_dual_dequant",
                               {{q,           "q",           0},
                                {scale_row,   "scale_row",   1},
                                {scale_col_1, "scale_col_1", 2},
                                {scale_col_2, "scale_col_2", 3}
                               });
-    torch::checkDeviceType("sym_double_dequant", {q, scale_row, scale_col_1, scale_col_2},
+    torch::checkDeviceType("sym_dual_dequant", {q, scale_row, scale_col_1, scale_col_2},
                             at::DeviceType::CUDA);
-    torch::checkAllSameGPU("sym_double_dequant",
+    torch::checkAllSameGPU("sym_dual_dequant",
                            {{q,           "q",           0},
                             {scale_row,   "scale_row",   1},
                             {scale_col_1, "scale_col_1", 2},
@@ -122,18 +122,18 @@ torch::Tensor sym_double_dequant(const torch::Tensor &q,
     uint32_t rows = q.size(0);
     uint32_t cols = q.size(1);
 
-    torch::checkSize("sym_double_dequant", torch::TensorArg{scale_row, "scale_row", 1}, 0,
+    torch::checkSize("sym_dual_dequant", torch::TensorArg{scale_row, "scale_row", 1}, 0,
                      rows);
-    torch::checkSize("sym_double_dequant", torch::TensorArg{scale_col_1, "scale_col_1", 2}, 0,
+    torch::checkSize("sym_dual_dequant", torch::TensorArg{scale_col_1, "scale_col_1", 2}, 0,
                      cols);
-    torch::checkSize("sym_double_dequant", torch::TensorArg{scale_col_2, "scale_col_2", 3}, 0,
+    torch::checkSize("sym_dual_dequant", torch::TensorArg{scale_col_2, "scale_col_2", 3}, 0,
                      cols);
     auto x = torch::empty(q.sizes(), torch::dtype(torch::kHalf).device(q.device()));
 
     switch (bits)
     {
         case 32:
-            sym_double_dequant_host(q.data_ptr<int32_t>(), 
+            sym_dual_dequant_host(q.data_ptr<int32_t>(), 
                                     (half*)scale_row.data_ptr(), 
                                     (half*)scale_col_1.data_ptr(),
                                     (half*)scale_col_2.data_ptr(), 

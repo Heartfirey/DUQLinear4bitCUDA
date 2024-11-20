@@ -1,5 +1,5 @@
 import torch
-from python.nn import Linear4bit, Linear4bitDUQ, Quantizer
+from python.nn import Linear4bit, Linear4bitDUQ, SymQuantizer
 import time
 import argparse
 import numpy as np
@@ -65,11 +65,11 @@ def linear4bit_benchmark(args):
             s_w = torch.ones((feature_dim_out, 1), dtype=torch.float16, device='cuda')
             s_w2 = torch.ones((feature_dim_out, 1), dtype=torch.float16, device='cuda')
             int4_mod = torch.nn.Sequential(
-                Quantizer(input_clip_ratio=1.0),
+                SymQuantizer(input_clip_ratio=1.0),
                 Linear4bit.from_float(baseline_mod, weight_scales=s_w)
             ).cuda()
             int4duq_mod = torch.nn.Sequential(
-                Quantizer(input_clip_ratio=1.0),
+                SymQuantizer(input_clip_ratio=1.0),
                 Linear4bitDUQ.from_float(baseline_mod, weight_scales_1=s_w, weight_scales_2=s_w2)
             ).cuda()
             # int4_mod_had = torch.nn.Sequential(

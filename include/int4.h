@@ -253,6 +253,14 @@ class MySubbyteReference {
 
 using Int4Subbyte = cutlass::MySubbyteReference<cutlass::int4b_t, uint8_t>;
 using Int4Storage = Int4Subbyte::Storage;
+
+using UInt4Subbyte = cutlass::MySubbyteReference<cutlass::uint4b_t, uint8_t>;
+using UInt4Storage = UInt4Subbyte::Storage;
+
 constexpr const uint32_t kElementsPerVector =
     cutlass::sizeof_bits<Int4Storage>::value /
     cutlass::sizeof_bits<cutlass::int4b_t>::value;
+
+constexpr const uint32_t kElementsPerVectorUInt4 =
+    cutlass::sizeof_bits<UInt4Storage>::value /
+    cutlass::sizeof_bits<cutlass::uint4b_t>::value;

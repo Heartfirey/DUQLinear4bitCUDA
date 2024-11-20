@@ -1,5 +1,5 @@
 import torch
-from python.nn import Linear4bit, Linear4bitDUQ, Quantizer
+from python.nn import Linear4bit, Linear4bitDUQ, SymQuantizer
 
 BATCH_SIZE = 1
 SEQ_LEN = 2048
@@ -14,12 +14,12 @@ baseline_mod.weight.data = torch.randint_like(baseline_mod.weight.data, low=-8, 
 s_w = torch.ones((FEAT_DIM_IN, 1), dtype=DTYPE, device='cuda')
 
 int4_mod = torch.nn.Sequential(
-    Quantizer(input_clip_ratio=1.0),
+    SymQuantizer(input_clip_ratio=1.0),
     Linear4bit.from_float(baseline_mod, weight_scales=s_w)
 ).cuda()
 
 int4d_mod = torch.nn.Sequential(
-    Quantizer(input_clip_ratio=1.0),
+    SymQuantizer(input_clip_ratio=1.0),
     Linear4bitDUQ.from_float(baseline_mod, weight_scales_1=s_w, weight_scales_2=s_w)
 ).cuda()
 
