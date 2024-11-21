@@ -1,5 +1,5 @@
 import torch
-from python.nn import Linear4bit, Linear4bitDUQ, SymQuantizer
+from python.nn import Linear4bit, Linear4bitDUSQ, SymQuantizer
 import time
 import argparse
 import numpy as np
@@ -70,22 +70,8 @@ def linear4bit_benchmark(args):
             ).cuda()
             int4duq_mod = torch.nn.Sequential(
                 SymQuantizer(input_clip_ratio=1.0),
-                Linear4bitDUQ.from_float(baseline_mod, weight_scales_1=s_w, weight_scales_2=s_w2)
+                Linear4bitDUSQ.from_float(baseline_mod, weight_scales_1=s_w, weight_scales_2=s_w2)
             ).cuda()
-            # int4_mod_had = torch.nn.Sequential(
-            #     OnlineHadamard(baseline_mod.in_features, force_fp32=True),
-            #     Quantizer(input_clip_ratio=1.0),
-            #     Linear4bit.from_float(baseline_mod, weight_scales=s_w),
-            # ).cuda()
-            # #int4_mod_had.online_full_had = True
-            # #int4_mod.fp32_had = True
-            
-            # int4_mod_fp16had = torch.nn.Sequential(
-            #     OnlineHadamard(baseline_mod.in_features, force_fp32=False),
-            #     Quantizer(input_clip_ratio=1.0),
-            #     Linear4bit.from_float(baseline_mod, weight_scales=s_w),
-            # ).cuda()
-
 
 
             print(f"{dtype}. Sizes: {baseline_mod.weight.shape}")
@@ -99,16 +85,7 @@ def linear4bit_benchmark(args):
                 times_4bitduq.append(module_benchmark(int4duq_mod, x))
             print(f"Int4-DualUniformQuant time: {np.mean(times_4bitduq):.3f} +- {1.96 * np.std(times_4bitduq):.3f}ms")
             
-            # times_4bit_had = []
-            # for i in range(10):
-            #     times_4bit_had.append(module_benchmark(int4_mod_had, x))
-            # print(f"Int4 (+FP32had) time: {np.mean(times_4bit_had):.3f} +- {1.96 * np.std(times_4bit_had):.3f}ms")
-            
-            # times_4bit_fp16had = []
-            # for i in range(10):
-            #     times_4bit_fp16had.append(module_benchmark(int4_mod_fp16had, x))
-            # print(f"Int4 (+FP16had) time: {np.mean(times_4bit_fp16had):.3f} +- {1.96 * np.std(times_4bit_fp16had):.3f}ms")
-            
+
             
             times_baseline = []
             for i in range(10):

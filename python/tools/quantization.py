@@ -39,9 +39,9 @@ def sym_quant_dequant(x, scale, maxq):
 
 
 # Pack the int tensor. Each uint8 stores two int4 value.
-def pack_i4(q):
+def pack_i4(q, sym=True):
     assert torch.is_signed(q), 'The tensor to be packed should be signed int'
-    minq, maxq = get_minq_maxq(4, True)
+    minq, maxq = get_minq_maxq(4, sym)
     assert torch.all(torch.logical_and(q >= minq, q <= maxq))
 
     q_i8 = two_compl(q.to(dtype=torch.int8), 4).to(torch.uint8)

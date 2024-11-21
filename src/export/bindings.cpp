@@ -297,6 +297,13 @@ torch::Tensor asym_dual_dequant(
             TORCH_CHECK(false, "Unsupported data type")
     }
 
+    return x;
+}
+
+// ===== DualQuant K ======
+
+int get_dual_quant_col_k() {
+    return QUANT_COL_K;
 }
 
 // ===== Flash Infer ======
@@ -694,6 +701,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m
         "input x type is int32\n",
         py::arg("q"), py::arg("scale_row"), py::arg("zeros_row"), py::arg("scale_col_1"), py::arg("zeros_col_1"), py::arg("scale_col_2"), py::arg("zeros_col_2"),
         py::arg("bits"));
+
+    m.def("get_dual_quant_col_k", &get_dual_quant_col_k, "");
 
     m.def("batch_decode_i4", &batch_decode_i4, "");
     m.def("init_kv_i4", &init_kv_i4, "");

@@ -61,7 +61,7 @@ def asym_dequant(q, scale_row, zeros_row, scale_col, zeros_col, bits=32):
     assert q.dtype == torch.int32
     assert scale_row.dtype == zeros_row.dtype == scale_col.dtype == zeros_col.dtype == torch.float16
     q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
-    return qcu_tool.asym_dequant(q, scale_row.view(-1), zeros_row.view(-1), scale_col, zeros_col, bits).view(*q_shape_excl_last, -1)
+    return qcu_tool.asym_dequant(q, scale_row.view(-1), zeros_row.view(-1), scale_col.view(-1), zeros_col.view(-1), bits).view(*q_shape_excl_last, -1)
 
 
 def asym_dual_quant(q, scale_1, zeros1, scale_2, zeros2):
@@ -75,13 +75,16 @@ def asym_dual_quant(q, scale_1, zeros1, scale_2, zeros2):
 
 def asym_dual_dequant(q, scale_row, zeros_row, scale_col_1, zeros_col_1, scale_col_2, zeros_col_2, bits=32):
     assert q.dtype == torch.int32
-    assert scale_row.dtype == scale_col_1.dtype == scale_col_2.dtype == torch.float16
-    assert zeros_row.dtype == zeros_col_1.dtype == zeros_col_2.dtype == torch.float16
+    assert scale_row.dtype == scale_col_1.dtype == scale_col_2.dtype == torch.float16, "torch.float16 assertation error: scale_row.dtype: {}, scale_col_1.dtype: {}, scale_col_2.dtype: {}".format(scale_row.dtype, scale_col_1.dtype, scale_col_2.dtype)
+    assert zeros_row.dtype == zeros_col_1.dtype == zeros_col_2.dtype == torch.float16, "torch.float16 assertation error: zeros_row.dtype: {}, zeros_col_1.dtype: {}, zeros_col_2.dtype: {}".format(zeros_row.dtype, zeros_col_1.dtype, zeros_col_2.dtype)
     q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
     return qcu_tool.asym_dual_dequant(q, 
                                       scale_row.view(-1), zeros_row.view(-1), 
                                       scale_col_1.view(-1), zeros_col_1.view(-1), 
                                       scale_col_2.view(-1), zeros_col_2.view(-1), bits).view(*q_shape_excl_last, -1)
+
+def get_dual_quant_col():
+    return qcu_tool.get_dual_quant_col_k()
 
 class PackedQuantizedTensor:
     def __init__(self, 
