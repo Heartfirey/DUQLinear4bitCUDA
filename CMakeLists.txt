@@ -48,30 +48,36 @@ include_directories(lib/cutlass/include)
 include_directories(lib/cutlass/tools/util/include)
 
 # LibTorch Requirements
-set(LIBTORCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib/libtorch")
-if(NOT EXISTS "${LIBTORCH_DIR}/build-version")
-    message(STATUS "libtorch not found, will download...")
-    set(LIBTORCH_URL "https://download.pytorch.org/libtorch/cu121/libtorch-shared-with-deps-2.5.1%2Bcu121.zip")
-    set(LIBTORCH_ZIP "${CMAKE_CURRENT_SOURCE_DIR}/lib/libtorch.zip")
-    set(LIBTORCH_DIR "${CMAKE_CURRENT_BINARY_DIR}/lib/libtorch")
-    file(DOWNLOAD ${LIBTORCH_URL} ${LIBTORCH_ZIP}
-         SHOW_PROGRESS
-         TIMEOUT 12000)
-    message(STATUS "Extracting libtorch...")
-    execute_process(COMMAND unzip ${LIBTORCH_ZIP} -d ${LIBTORCH_DIR})
-    execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${LIBTORCH_ZIP})
+option(require_libtorch "Download and configure libtorch" ON)
+if(require_libtorch)
+    message(STATUS "[Libtorch required], configuring...")
+    set(LIBTORCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib/libtorch")
+    if(NOT EXISTS "${LIBTORCH_DIR}/build-version")
+        message(STATUS "libtorch not found, will download...")
+        set(LIBTORCH_URL "https://download.pytorch.org/libtorch/cu121/libtorch-shared-with-deps-2.5.1%2Bcu121.zip")
+        set(LIBTORCH_ZIP "${CMAKE_CURRENT_SOURCE_DIR}/lib/libtorch.zip")
+        set(LIBTORCH_DIR "${CMAKE_CURRENT_BINARY_DIR}/lib/libtorch")
+        file(DOWNLOAD ${LIBTORCH_URL} ${LIBTORCH_ZIP}
+            SHOW_PROGRESS
+            TIMEOUT 12000)
+        message(STATUS "Extracting libtorch...")
+        execute_process(COMMAND unzip ${LIBTORCH_ZIP} -d ${LIBTORCH_DIR})
+        execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${LIBTORCH_ZIP})
+    else()
+        message(STATUS "libtorch found, configuring...")
+    endif()
+    # set(Torch_DIR ${LIBTORCH_DIR})
+    set(Torch_DIR "${LIBTORCH_DIR}/share/cmake/Torch" CACHE PATH "Torch dir")
+    file(READ "${LIBTORCH_DIR}/build-version" BUILD_VERSION_CONTENT)
+    string(STRIP "${BUILD_VERSION_CONTENT}" BUILD_VERSION_CONTENT)
+    find_package(Torch REQUIRED)
+    message(STATUS "LibTorch status:")
+    message(STATUS "  - version: ${BUILD_VERSION_CONTENT}")
+    message(STATUS "  - libraries: ${TORCH_LIBRARIES}")
+    include_directories(${Torch_DIR}/include)
 else()
-    message(STATUS "libtorch found, configuring...")
+    message(STATUS "[Libtorch NOT required], skipping configuration.")
 endif()
-# set(Torch_DIR ${LIBTORCH_DIR})
-set(Torch_DIR "${LIBTORCH_DIR}/share/cmake/Torch" CACHE PATH "Torch dir")
-file(READ "${LIBTORCH_DIR}/build-version" BUILD_VERSION_CONTENT)
-string(STRIP "${BUILD_VERSION_CONTENT}" BUILD_VERSION_CONTENT)
-find_package(Torch REQUIRED)
-message(STATUS "LibTorch status:")
-message(STATUS "  - version: ${BUILD_VERSION_CONTENT}")
-message(STATUS "  - libraries: ${TORCH_LIBRARIES}")
-include_directories(${Torch_DIR}/include)
 
 ##* Third-party Library
 # spdlog Requirements
@@ -108,13 +114,4 @@ target_link_libraries(pipeline PUBLIC -lcurand ${TORCH_LIBRARIES})
 add_custom_target(PYSETUP ALL
     COMMAND ${CMAKE_COMMAND} -E echo "This target is used for python setup build preparation."
 )
-
-# add_custom_command(
-#     TARGET EfficientLinear4bitTest
-#     POST_BUILD
-#     COMMAND ${CMAKE_COMMAND} -E echo "Running test..."
-#     COMMAND nvidia-smi
-#     COMMAND ${CMAKE_BINARY_DIR}/EfficientLinear4bitTest
-#     COMMENT "Executing test after build." 
-# )
 
