@@ -43,9 +43,9 @@ def execute_cmake():
         sys.exit(1)
     
     # install fast hadamard transform
-    hadamard_dir = os.path.join(HERE, 'lib/fast-hadamard-transform')
-    pip = shutil.which('pip')
-    retcode = subprocess.call([pip, 'install', '-e', hadamard_dir])
+    # hadamard_dir = os.path.join(HERE, 'lib/fast-hadamard-transform')
+    # pip = shutil.which('pip')
+    # retcode = subprocess.call([pip, 'install', '-e', hadamard_dir])
 
 if __name__ == "__main__":
     execute_cmake()
@@ -53,10 +53,10 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(setup_dir, 'qlinear4bit'), exist_ok=True)
     os.makedirs(os.path.join(setup_dir, 'packages', 'qlinear4bit'), exist_ok=True)
     setup(
-        name='packages.qlinear4bit',
+        name='qlinear4bit',
         ext_modules=[
             CUDAExtension(
-                name='packages.qlinear4bit._CUDA',
+                name='qlinear4bit._CUDA',
                 sources=[
                     'src/export/bindings.cpp',
                     'src/kernels/gemm.cu',

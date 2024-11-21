@@ -36,8 +36,6 @@ def sym_dequant(q, scale):
 def sym_quant_dequant(x, scale, maxq):
     return sym_dequant(*sym_quant(x, scale, maxq))
 
-
-
 # Pack the int tensor. Each uint8 stores two int4 value.
 def pack_i4(q, sym=True):
     assert torch.is_signed(q), 'The tensor to be packed should be signed int'

@@ -80,7 +80,7 @@ print("Py Quantized X:\n", py_quant_x)
 print("Py Qunatized X-compressed:\n", pack_i4(py_quant_x.transpose(-1, -2)).transpose(-1, -2))
 # print("Py Quantized X-decompressed:\n", unpack_i4(pack_i4(py_quant_x.transpose(-1, -2)).transpose(-1, -2)))
 
-from python.nn.quantizer import AsymQuantizer
+from qlinear4bit.nn.quantizer import AsymQuantizer
 
 cuda_quant_x = AsymQuantizer()(sample_x)
 

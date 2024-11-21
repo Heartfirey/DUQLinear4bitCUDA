@@ -1,5 +1,5 @@
 import torch
-from python.nn import Linear4bit, Linear4bitDUSQ, SymQuantizer
+from qlinear4bit.nn import Linear4bit, Linear4bitDUSQ, SymQuantizer
 import time
 import argparse
 import numpy as np

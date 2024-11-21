@@ -13,6 +13,6 @@
 [submodule "lib/nvbench"]
 	path = lib/nvbench
 	url = https://github.com/NVIDIA/nvbench
-[submodule "lib/fast-hadamard-transform"]
-	path = lib/fast-hadamard-transform
-	url = https://github.com/Dao-AILab/fast-hadamard-transform.git
+# [submodule "lib/fast-hadamard-transform"]
+# 	path = lib/fast-hadamard-transform
+# 	url = https://github.com/Dao-AILab/fast-hadamard-transform.git

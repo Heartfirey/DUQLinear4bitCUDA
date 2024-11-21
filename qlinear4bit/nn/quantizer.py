@@ -1,6 +1,6 @@
 import torch
-# import python.tools.quantization as quant_utils
-import python.tools.tensor_utils as tensor_utils
+# import qlinear4bit.tools.quantization as quant_utils
+import qlinear4bit.tools.tensor_utils as tensor_utils
 
 class SymQuantizer(torch.nn.Module):
     def __init__(self, input_clip_ratio=1.0):

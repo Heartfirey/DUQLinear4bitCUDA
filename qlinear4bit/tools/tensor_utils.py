@@ -1,5 +1,5 @@
 import torch
-import packages.qlinear4bit._CUDA as qcu_tool
+import qlinear4bit._CUDA as qcu_tool
 
 class ShapeHandler:
     def __init__(self, x: torch.Tensor):
@@ -16,12 +16,32 @@ class ShapeHandler:
 
     def unflatten_scale(self, x: torch.Tensor):
         return x.view(self.shape_excl_last)
+    
+class PackedQuantizedTensor:
+    def __init__(self, 
+                 quantized_x: torch.Tensor, 
+                 scales_x: torch.Tensor,
+                 zeros_x: torch.Tensor = None):
+        self.quantized_x = quantized_x
+        self.scales_x = scales_x
+        self.zeros_x = zeros_x
 
+    def size(self):
+        return self.quantized_x.size()
+    
+    @property
+    def device(self):
+        return self.quantized_x.device
+    
+    @property
+    def dtype(self):
+        return self.quantized_x.dtype
+    
+    
 def flatten_last_dim_and_return_shape(x: torch.Tensor):
     shape_excl_last = x.shape[:-1]
     x = x.view(-1, x.shape[-1])
     return x, shape_excl_last
-
 
 def matmul(A, B):
     assert A.shape[-1] % 32 == 0, "A.shape[-1]: {} must be multiplication of 32".format(A.shape[-1])
@@ -85,23 +105,3 @@ def asym_dual_dequant(q, scale_row, zeros_row, scale_col_1, zeros_col_1, scale_c
 
 def get_dual_quant_col():
     return qcu_tool.get_dual_quant_col_k()
-
-class PackedQuantizedTensor:
-    def __init__(self, 
-                 quantized_x: torch.Tensor, 
-                 scales_x: torch.Tensor,
-                 zeros_x: torch.Tensor = None):
-        self.quantized_x = quantized_x
-        self.scales_x = scales_x
-        self.zeros_x = zeros_x
-
-    def size(self):
-        return self.quantized_x.size()
-    
-    @property
-    def device(self):
-        return self.quantized_x.device
-    
-    @property
-    def dtype(self):
-        return self.quantized_x.dtype

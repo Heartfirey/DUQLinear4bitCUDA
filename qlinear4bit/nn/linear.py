@@ -1,9 +1,8 @@
 import math
 import torch
-# import fast_hadamard_transform
-import python.tools.tensor_utils as tensor_utils
-import python.tools.quantization as quant_utils
-from python.nn.quantizer import SymQuantizer, AsymQuantizer
+import qlinear4bit.tools.tensor_utils as tensor_utils
+import qlinear4bit.tools.quantization as quant_utils
+from qlinear4bit.nn.quantizer import SymQuantizer, AsymQuantizer
 
 class ShapeHandler:
     def __init__(self, x: torch.Tensor):

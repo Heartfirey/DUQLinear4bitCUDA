@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from python.nn.quantizer import SymQuantizer, AsymQuantizer
-import python.tools.tensor_utils as tensor_utils
+from qlinear4bit.nn.quantizer import SymQuantizer, AsymQuantizer
+import qlinear4bit.tools.tensor_utils as tensor_utils
 
 
 class AsymQuantMatMul(nn.Module):
