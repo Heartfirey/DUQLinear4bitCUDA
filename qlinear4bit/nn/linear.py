@@ -21,7 +21,7 @@ class ShapeHandler:
         return x.view(self.shape_excl_last)
 
 
-class Linear4bit(torch.nn.Module):
+class Linear4bitSQ(torch.nn.Module):
     def __init__(self, in_features, out_features, bias=False, dtype=torch.float16):
         '''
         Symmetric 4-bit Linear Layer.
@@ -64,7 +64,7 @@ class Linear4bit(torch.nn.Module):
         '''
         weight_matrix = module.weight.data
         
-        int_module = Linear4bit(module.in_features, module.out_features, bias=module.bias is not None, dtype=weight_matrix.dtype).to(weight_matrix.dtype)
+        int_module = Linear4bitSQ(module.in_features, module.out_features, bias=module.bias is not None, dtype=weight_matrix.dtype).to(weight_matrix.dtype)
         if weight_scales is not None:
             assert weight_scales.shape == (module.out_features, 1), 'weight_scales should have shape (out_features, 1)'
             weight_matrix = weight_matrix.cuda()
@@ -76,6 +76,73 @@ class Linear4bit(torch.nn.Module):
                 int_module.bias.copy_(module.bias)
         
         return int_module
+    
+class Linear4bitASQ(torch.nn.Module):
+    def __init__(self, in_features, out_features, bias=False, require_quantizer=True):
+        '''
+        Asymmetric 4-bit Linear Layer.
+        '''
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.require_quantizer = require_quantizer
+        self.register_buffer('weight_scales',
+                             torch.zeros((self.out_features, 1), requires_grad=False, dtype=torch.float16))
+        self.register_buffer('weight_zeros',
+                             torch.zeros((self.out_features, 1), requires_grad=False, dtype=torch.float16))
+        self.register_buffer('weight', (torch.randint(1, 7, (self.out_features, self.in_features // 2),
+                                                             # SubByte weight
+                                                             dtype=torch.uint8, requires_grad=False)))
+        if bias:                                                        
+            self.register_buffer('bias', torch.zeros((self.out_features), dtype=torch.float16))
+        else:
+            self.bias = None
+        
+        if require_quantizer:
+            self.quantizer = AsymQuantizer(n_bits=4)
+    
+    def forward(self, x):
+        if self.require_quantizer:
+            x = self.quantizer(x)
+        assert type(x) == tensor_utils.PackedQuantizedTensor, \
+            "Input should be quantized tensor, or require_quantizer should be passed as initial argument"
+        x, scales_x, zeros_x = x.quantized_x, x.scales_x, x.zeros_x
+        x = tensor_utils.matmul(x, self.weight)
+        
+        if self.bias is not None:
+            return tensor_utils.asym_dequant(x, scales_x, zeros_x, self.weight_scales, self.weight_zeros) + self.bias
+        else:
+            return tensor_utils.asym_dequant(x, scales_x, zeros_x, self.weight_scales, self.weight_zeros)
+    
+    @classmethod
+    def from_linear(cls, module: torch.nn.Linear, require_quantizer: bool=True):
+        int4_linear = cls(
+            in_features=module.in_features,
+            out_features=module.out_features,
+            bias=module.bias is not None,
+            require_quantizer=require_quantizer
+        )
+        
+        fp16_weight = module.weight.data
+        int4_quant_level = 2**4
+        
+        weight_max = torch.max(torch.abs(fp16_weight), dim=-1, keepdim=True)[0]
+        weight_min = torch.min(torch.abs(fp16_weight), dim=-1, keepdim=True)[0]
+        weight_scale = (weight_max - weight_min) / (int4_quant_level - 1)
+        weight_zeros = (-weight_min / weight_scale).round().to(torch.float16)
+        
+        # quant directly
+        int4_quant_weight = torch.clamp(torch.round(fp16_weight / weight_scale) + weight_zeros,
+                                        0, int4_quant_level - 1)
+        int4_linear.weight.copy_(quant_utils.pack_i4(int4_quant_weight.to(torch.int8), sym=False).cpu())
+        
+        int4_linear.weight_scales.copy_(weight_scale.to(torch.float16))
+        int4_linear.weight_zeros.copy_(weight_zeros.to(torch.float16))
+        
+        if module.bias is not None:
+            int4_linear.bias.copy_(module.bias)
+        
+        return int4_linear
 
 class Linear4bitDUSQ(torch.nn.Module):
     def __init__(self, in_features, out_features, bias=False, dtype=torch.float16):
@@ -137,6 +204,7 @@ class Linear4bitDUSQ(torch.nn.Module):
                 int_module.bias.copy_(module.bias)
         
         return int_module
+
         
 class LinearQuant4bitDUASQ(torch.nn.Module):
     def __init__(self,
