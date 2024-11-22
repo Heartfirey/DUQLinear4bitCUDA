@@ -8,6 +8,8 @@ class SymQuantizer(torch.nn.Module):
         self.input_clip_ratio = input_clip_ratio
     
     def forward(self, x) -> tensor_utils.PackedQuantizedTensor:
+        if not x.is_contiguous():
+            x = x.contiguous()
         scales_x = (torch.max(torch.abs(x), dim=-1)[0].unsqueeze(1)/7).to(torch.float16) * self.input_clip_ratio
         quantized_x = tensor_utils.sym_quant(x, scales_x)
         packed_tensor = tensor_utils.PackedQuantizedTensor(quantized_x, scales_x)
@@ -20,6 +22,8 @@ class AsymQuantizer(torch.nn.Module):
         self.input_clip_ratio = input_clip_ratio
 
     def forward(self, x) -> tensor_utils.PackedQuantizedTensor:
+        if not x.is_contiguous():
+            x = x.contiguous()
         min_val, _ = x.min(dim=-1, keepdim=True)
         max_val, _ = x.max(dim=-1, keepdim=True)
         

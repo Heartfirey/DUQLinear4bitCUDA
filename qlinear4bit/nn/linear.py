@@ -229,7 +229,7 @@ class LinearQuant4bitDUASQ(torch.nn.Module):
                                                              # SubByte weight
                                                              dtype=torch.uint8, requires_grad=False)))
         if bias:                                                        
-            self.register_buffer('bias', torch.zeros((self.out_features), dtype=torch.float16()))
+            self.register_buffer('bias', torch.zeros((self.out_features), dtype=torch.float16))
         else:
             self.bias = None
             
