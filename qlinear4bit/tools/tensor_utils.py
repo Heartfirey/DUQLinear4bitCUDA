@@ -43,11 +43,23 @@ def flatten_last_dim_and_return_shape(x: torch.Tensor):
     x = x.view(-1, x.shape[-1])
     return x, shape_excl_last
 
+def flatten_last_two_dim_and_return_shape(x: torch.Tensor):
+    shape_excl_last_two, shape_last_two = x.shape[:-2], x.shape[-2:]
+    x = x.view(-1, x.shape[-2], x.shape[-1])
+    return x, shape_excl_last_two, shape_last_two
+
 def matmul(A, B):
     assert A.shape[-1] % 32 == 0, "A.shape[-1]: {} must be multiplication of 32".format(A.shape[-1])
     A, A_shape_excl_last = flatten_last_dim_and_return_shape(A)
     B, B_shape_excl_last = flatten_last_dim_and_return_shape(B)
     return qcu_tool.matmul(A, B).view(*A_shape_excl_last, *B_shape_excl_last)
+
+def batched_matmul(A, B):
+    assert A.shape[-1] % 32 == 0, "A.shape[-1]: {} must be multiplication of 32".format(A.shape[-1])
+    # A, A_shape_excl_last_two, A_shape_last_two = flatten_last_two_dim_and_return_shape(A)
+    # B, B_shape_excl_last_two, B_shape_last_two = flatten_last_two_dim_and_return_shape(B)
+    import IPython; IPython.embed();
+    return qcu_tool.batched_matmul(A, B)
 
 def sym_quant(x, scale):
     assert x.dtype == scale.dtype == torch.float16
@@ -83,6 +95,14 @@ def asym_dequant(q, scale_row, zeros_row, scale_col, zeros_col, bits=32):
     q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
     return qcu_tool.asym_dequant(q, scale_row.view(-1), zeros_row.view(-1), scale_col.view(-1), zeros_col.view(-1), bits).view(*q_shape_excl_last, -1)
 
+def asym_batch_dequant(q, scale_row, zeros_row, scale_col, zeros_col, bits=32):
+    assert q.dtype == torch.int32
+    assert scale_row.dtype == zeros_row.dtype == scale_col.dtype == zeros_col.dtype == torch.float16
+    q, q_shape_excl_last_two, q_shape_last_two = flatten_last_two_dim_and_return_shape(q)
+    return qcu_tool.asym_batch_dequant(q, 
+                                       scale_row, zeros_row, 
+                                       scale_col, zeros_col, bits
+                                       ).view(*q_shape_excl_last_two, q_shape_last_two[-2], q_shape_last_two[-1])
 
 def asym_dual_quant(q, scale_1, zeros1, scale_2, zeros2):
     assert q.dtype == torch.int32

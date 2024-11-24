@@ -54,7 +54,7 @@ void sym_dual_quant_host(
     Int4Storage *q
 )
 {
-    dim3 block{std::min<uint32_t>(colsDst, 32), std::min<uint32_t>(rows, 16)};
+    dim3 block{std::min<uint32_t>(colsDst, 16), std::min<uint32_t>(rows, 16)};
     dim3 grid{cdiv(colsDst, block.x), cdiv(rows, block.y)};
     sym_dual_quantize_f16_i4_kernel<<<grid, block>>>(x, scale_1, scale_2, rows, colsSrc, colsDst, q);
 }
@@ -150,7 +150,7 @@ void asym_dual_quant_host(
     UInt4Storage *q
 )
 {
-    dim3 block{std::min<uint32_t>(colsDst, 32), std::min<uint32_t>(rows, 16)};
+    dim3 block{std::min<uint32_t>(colsDst, 16), std::min<uint32_t>(rows, 16)};
     dim3 grid{cdiv(colsDst, block.x), cdiv(rows, block.y)};
     asym_dual_quantize_f16_i4_kernel<<<grid, block>>>(x, scale_1, zeros_1, scale_2, zeros_2, rows, colsSrc, colsDst, q);
 }

@@ -55,7 +55,7 @@ void sym_quant_host(
 )
 {
 
-    dim3 block{std::min<uint32_t>(colsDst, 32), std::min<uint32_t>(rows, 16)};
+    dim3 block{std::min<uint32_t>(colsDst, 16), std::min<uint32_t>(rows, 16)};
     dim3 grid{cdiv(colsDst, block.x), cdiv(rows, block.y)};
     sym_quantize_f16_i4_kernel<<<grid, block>>>(x, scale, rows, colsSrc, colsDst, q);
 }
@@ -141,7 +141,7 @@ void asym_quant_host(
     UInt4Storage *q
 )
 {
-    dim3 block{std::min<uint32_t>(colsDst, 32), std::min<uint32_t>(rows, 16)};
+    dim3 block{std::min<uint32_t>(colsDst, 16), std::min<uint32_t>(rows, 16)};
     dim3 grid{cdiv(colsDst, block.x), cdiv(rows, block.y)};
     asym_quantize_f16_i4_kernel<<<grid, block>>>(x, scale, zeros, rows, colsSrc, colsDst, q);
 }
@@ -185,4 +185,55 @@ void asym_dequant_host(
                                                     scale_row, zeros_row, 
                                                     scale_col, zeros_col, 
                                                     rows, cols, x);
+}
+
+__global__
+void asym_batch_dequantize_i32_f16_kernel(
+    const int32_t *__restrict__ q,
+    const half *__restrict__ scale_row,
+    const half *__restrict__ zeros_row,
+    const half *__restrict__ scale_col,
+    const half *__restrict__ zeros_col,
+    uint32_t batches,
+    uint32_t rows,
+    uint32_t cols,
+    half *x
+)
+{
+    uint32_t batch = threadIdx.z + blockIdx.z * blockDim.z;
+    uint32_t row = threadIdx.y + blockIdx.y * blockDim.y;
+    uint32_t col = threadIdx.x + blockIdx.x * blockDim.x;
+    if (batch >= batches || col >= cols || row >= rows)
+    {
+        return;
+    }
+
+    uint32_t q_index = col + row * cols + batch * cols * rows;
+    uint32_t scale_row_index = row + batch * rows;
+    uint32_t scale_col_index = col + batch * cols;
+    uint32_t x_index = col + row * cols + batch * cols * rows;
+
+    half xElement = int_to_half(q[q_index]);
+    x[x_index] = (scale_row[scale_row_index] * scale_col[scale_col_index]) *
+                 (xElement - zeros_row[scale_row_index] - zeros_col[scale_col_index]);
+}
+
+void asym_batch_dequant_host(
+    const int32_t *q,
+    const half *scale_row,
+    const half *zeros_row,
+    const half *scale_col,
+    const half *zeros_col,
+    uint32_t batches,
+    uint32_t rows,
+    uint32_t cols,
+    half *x
+)
+{
+    dim3 block{std::min<uint32_t>(cols, 16), std::min<uint32_t>(rows, 16), std::min<uint32_t>(batches, 4)};
+    dim3 grid{cdiv(cols, block.x), cdiv(rows, block.y), cdiv(batches, block.z)};
+    asym_batch_dequantize_i32_f16_kernel<<<grid, block>>>(q, 
+                                                          scale_row, zeros_row, 
+                                                          scale_col, zeros_col, 
+                                                          batches, rows, cols, x);
 }

@@ -24,6 +24,29 @@ torch::Tensor matmul(const torch::Tensor &A, const torch::Tensor &B)
     return C;
 }
 
+// torch::Tensor batched_matmul(const torch::Tensor &A, const torch::Tensor &B)
+// {
+//     torch::checkAllContiguous("batched_matmul", {{A, "A", 0},
+//                                                  {B, "B", 1}});
+//     torch::checkDeviceType("batched_matmul", {A, B}, at::DeviceType::CUDA);
+//     torch::checkAllSameGPU("batched_matmul", {{A, "A", 0},
+//                                               {B, "B", 1}});
+//     uint32_t batch_count = A.size(0);
+//     uint32_t M = A.size(1);
+//     uint32_t N = B.size(1);
+//     uint32_t K = A.size(2) * kElementsPerVector;  // 4bit packing is on the columns
+//     auto C = torch::empty({batch_count, M, N}, torch::dtype(torch::kInt32).device(A.device()));
+
+//     batch_matmul_host_4bit(
+//         A.data_ptr<Int4Storage>(), 
+//         B.data_ptr<Int4Storage>(), 
+//         M, N, K, 
+//         C.data_ptr<int32_t>(), 
+//         batch_count
+//     );
+//     return C;
+// }
+
 // ===== Sym Quant/Dequant ======
 
 torch::Tensor sym_quant(const torch::Tensor &x, const torch::Tensor &scale)
@@ -216,6 +239,48 @@ torch::Tensor asym_dequant(
                               (half*)scale_row.data_ptr(), (half*)zeros_row.data_ptr(),
                               (half*)scale_col.data_ptr(), (half*)zeros_col.data_ptr(),
                               rows, cols, (half*)x.data_ptr());
+            break;
+        default:
+            TORCH_CHECK(false, "Unsupported data type")
+    }
+
+    return x;
+}
+
+torch::Tensor asym_batch_dequant(
+    const torch::Tensor &q,
+    const torch::Tensor &scale_row, const torch::Tensor &zeros_row,
+    const torch::Tensor &scale_col, const torch::Tensor &zeros_col,
+    const int bits
+)
+{
+    torch::checkAllContiguous("asym_batch_dequant", {{q,       "q",        0},
+                              {scale_row, "scale_row", 1}, {zeros_row, "zeros_row", 2},
+                              {scale_col, "scale_col", 3}, {zeros_col, "zeros_col", 4}});
+    torch::checkDeviceType("asym_batch_dequant", {q, scale_row, zeros_row, scale_col, zeros_col}, 
+                            at::DeviceType::CUDA);
+    torch::checkAllSameGPU("asym_batch_dequant", {{q, "q", 0}, 
+                         {scale_row, "scale_row", 1}, {zeros_row, "zeros_row", 2},
+                         {scale_col, "scale_col", 3}, {zeros_col, "zeros_col", 4}});
+    
+    uint32_t batches = q.size(0);
+    uint32_t rows = q.size(1);
+    uint32_t cols = q.size(2);
+
+    torch::checkSize("asym_batch_dequant", torch::TensorArg{scale_row, "scale_row", 1}, 1, rows);
+    torch::checkSize("asym_batch_dequant", torch::TensorArg{zeros_row, "zeros_row", 2}, 1, rows);
+    torch::checkSize("asym_batch_dequant", torch::TensorArg{scale_col, "scale_col", 3}, 1, cols);
+    torch::checkSize("asym_batch_dequant", torch::TensorArg{zeros_col, "zeros_col", 4}, 1, cols);
+
+    auto x = torch::empty(q.sizes(), torch::dtype(torch::kHalf).device(q.device()));
+
+    switch (bits)
+    {
+        case 32:
+            asym_batch_dequant_host(q.data_ptr<int32_t>(), 
+                              (half*)scale_row.data_ptr(), (half*)zeros_row.data_ptr(),
+                              (half*)scale_col.data_ptr(), (half*)zeros_col.data_ptr(),
+                              batches, rows, cols, (half*)x.data_ptr());
             break;
         default:
             TORCH_CHECK(false, "Unsupported data type")
@@ -662,6 +727,22 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m
         "output: torch.Tensor(M x ceil(N / 2), UINT8, CUDA)\n"
         "output = int4Packing(int4Rounding(source / scale)\n",
         py::arg("x"), py::arg("scale"), py::arg("zeros"));
+
+    m.def("asym_batch_dequant", &asym_batch_dequant,
+        "input: (src: torch.Tensor(B x M x N, INT32, CUDA), scale_row: "
+        "torch.Tensor(B x M x 1, FP16, CUDA), zeros_row: torch.Tensor(B x M x 1, FP16, CUDA), "
+        "scale_col: torch.Tensor(B x 1 x N, FP16, CUDA), zeros_col: torch.Tensor(B x 1 x N, FP16, CUDA))"
+        "bits: int\n"
+        "output: torch.Tensor(B x M x N, FP16, CUDA)\n"
+        "output = x * scale_row * scale_col"
+        "when bits equal 8: "
+        "input x type is int8\n"
+        "when bits equal 16: "
+        "input x type is FP16\n"
+        "when bits equal 32: "
+        "input x type is int32\n",
+        py::arg("q"), py::arg("scale_row"), py::arg("zeros_row"), py::arg("scale_col"), py::arg("zeros_col"),
+        py::arg("bits"));
 
     m.def("asym_dequant", &asym_dequant,
         "input (x: torch.Tensor(M x N), scale_row: torch.Tensor(M x 1, "
