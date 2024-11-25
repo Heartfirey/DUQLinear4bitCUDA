@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.18)
-set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
-set(CMAKE_LANGUAGE_COMPILER "/usr/local/cuda/bin/nvcc")
-set(LD_LIBRARY_PATH "/usr/local/cuda/lib64")
+if(DEFINED ENV{CUDA_HOME})
+  set(CUDA_HOME $ENV{CUDA_HOME})
+else()
+  set(CUDA_HOME "/usr/local/cuda-12.1")
+endif()
+
+set(CMAKE_CUDA_COMPILER "${CUDA_HOME}/bin/nvcc")
+set(CMAKE_LANGUAGE_COMPILER "${CUDA_HOME}/bin/nvcc")
+set(LD_LIBRARY_PATH "${CUDA_HOME}/lib64")
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -43,7 +49,14 @@ set(CMAKE_CUDA_KNOWN_FEATURES "80;86")   # For NVIDIA Ampere Architecture
 set(CMAKE_CUDA_ARCHITECTURES "80;86")    # For NVIDIA Ampere Architecture
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -lineinfo -Xcompiler -rdynamic -Xcompiler -Wall")
 # cuda and cutlass include dependencies
-include_directories(/usr/local/cuda/include)
+if(DEFINED ENV{TRITON_HOME})
+    message(STATUS "TritonInclude: $ENV{TRITON_HOME}/backends/nvidia/include/")
+    include_directories($ENV{TRITON_HOME}/backends/nvidia/include/)
+    include_directories(${CUDA_HOME}/include)
+else()
+    include_directories(${CUDA_HOME}/include)
+endif()
+
 include_directories(lib/cutlass/include)
 include_directories(lib/cutlass/tools/util/include)
 
