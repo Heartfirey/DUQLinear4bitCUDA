@@ -177,8 +177,10 @@ void asym_dequantize_i32_f16_kernel(
     }
 
     half qElement = int_to_half(q[col + row * cols]);
-    half scale_col_used = col < QUANT_COL_K ? scale_col_1[col] : scale_col_2[col];
-    half zeros_col_used = col < QUANT_COL_K ? zeros_col_1[col] : zeros_col_2[col];
+    // half scale_col_used = col < QUANT_COL_K ? scale_col_1[col] : scale_col_2[col];
+    // half zeros_col_used = col < QUANT_COL_K ? zeros_col_1[col] : zeros_col_2[col];
+    half scale_col_used = (QUANT_COL_ST << col & 1) ? scale_col_1[col] : scale_col_2[col];
+    half zeros_col_used = (QUANT_COL_ST << col & 1) ? zeros_col_1[col] : zeros_col_2[col];
 
     x[col + row * cols] = (scale_row[row] * scale_col_used) * (qElement - zeros_row[row] - zeros_col_used);
 }

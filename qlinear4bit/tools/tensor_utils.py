@@ -96,8 +96,8 @@ def asym_quant(q, scale, zero):
     return qcu_tool.asym_quant(q, scale.view(-1), zero.view(-1)).view(*q_shape_excl_last, -1)
 
 def asym_quant_8bit(q, scale, zero):
-    assert q.dtype == torch.float16
-    assert scale.dtype == zero.dtype == torch.float16
+    assert q.dtype == torch.float32
+    assert scale.dtype == zero.dtype == torch.float32
     q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
     return qcu_tool.asym_quant_8bit(q, scale.view(-1), zero.view(-1)).view(*q_shape_excl_last, -1)
 
@@ -109,7 +109,7 @@ def asym_dequant(q, scale_row, zeros_row, scale_col, zeros_col, bits=32):
 
 def asym_dequant_hprec(q, scale_row, zeros_row, scale_col, zeros_col, bits=32):
     assert q.dtype == torch.int32
-    assert scale_row.dtype == zeros_row.dtype == scale_col.dtype == zeros_col.dtype == torch.float16
+    assert scale_row.dtype == zeros_row.dtype == scale_col.dtype == zeros_col.dtype == torch.float32
     q, q_shape_excl_last = flatten_last_dim_and_return_shape(q)
     return qcu_tool.asym_dequant_hprec(q, scale_row.view(-1), zeros_row.view(-1), scale_col.view(-1), zeros_col.view(-1), bits).view(*q_shape_excl_last, -1)
 

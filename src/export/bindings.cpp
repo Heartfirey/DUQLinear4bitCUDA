@@ -260,7 +260,7 @@ torch::Tensor asym_quant_8bit(
 
     auto q = torch::empty({rows, cols}, torch::dtype(torch::kInt8).device(x.device()));
 
-    asym_quant_host_8bit((half*)x.data_ptr(), (half*)scale.data_ptr(), (half*)zeros.data_ptr(), rows, cols, q.data_ptr<int8_t>());
+    asym_quant_host_8bit((float*)x.data_ptr(), (float*)scale.data_ptr(), (float*)zeros.data_ptr(), rows, cols, q.data_ptr<int8_t>());
 
     return q;
 }
@@ -330,15 +330,15 @@ torch::Tensor asym_dequant_hprec(
     torch::checkSize("asym_dequant_hprec", torch::TensorArg{scale_col, "scale_col", 3}, 0, cols);
     torch::checkSize("asym_dequant_hprec", torch::TensorArg{zeros_col, "zeros_col", 4}, 0, cols);
 
-    auto x = torch::empty(q.sizes(), torch::dtype(torch::kHalf).device(q.device()));
+    auto x = torch::empty(q.sizes(), torch::dtype(torch::kFloat32).device(q.device()));
 
     switch (bits)
     {
         case 32:
             asym_dequant_host_hprec(q.data_ptr<int32_t>(), 
-                                    (half*)scale_row.data_ptr(), (half*)zeros_row.data_ptr(),
-                                    (half*)scale_col.data_ptr(), (half*)zeros_col.data_ptr(),
-                                    rows, cols, (half*)x.data_ptr());
+                                    (float*)scale_row.data_ptr(), (float*)zeros_row.data_ptr(),
+                                    (float*)scale_col.data_ptr(), (float*)zeros_col.data_ptr(),
+                                    rows, cols, (float*)x.data_ptr());
             break;
         default:
             TORCH_CHECK(false, "Unsupported data type")
