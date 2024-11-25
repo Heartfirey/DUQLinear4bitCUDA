@@ -42,6 +42,44 @@ void matmul_host_4bit(
     CHECK_CUTLASS(gemmOp(arguments));
 }
 
+
+void matmul_host_8bit(
+        const int8_t *A,
+        const int8_t *B,
+        uint32_t M,
+        uint32_t N,
+        uint32_t K,
+        int32_t *C
+)
+{
+    using Gemm = cutlass::gemm::device::Gemm<
+            int8_t,                // ElementA
+            cutlass::layout::RowMajor,       // LayoutA
+            int8_t,                // ElementB
+            cutlass::layout::ColumnMajor,    // LayoutB
+            int32_t,                         // ElementOutput
+            cutlass::layout::RowMajor,       // LayoutOutput
+            int32_t,                         // ElementAccumulator
+            cutlass::arch::OpClassTensorOp,  // tag indicating Tensor Cores
+            cutlass::arch::Sm80  // tag indicating target GPU compute architecture  // TODO: This is just for compiling on my laptop temporarily. Should be higher when doing benchmarking.
+    >;
+
+    Gemm gemmOp;
+
+    using GemmCoord = cutlass::gemm::GemmCoord;
+
+    typename Gemm::Arguments arguments{
+            {static_cast<GemmCoord::Index>(M), static_cast<GemmCoord::Index>(N), static_cast<GemmCoord::Index>(K)},
+            {(int8_t *) A,           K},
+            {(int8_t *) B,           K},
+            {C,                      N},
+            {C,                      N},
+            {1,                      0}
+    };
+
+    CHECK_CUTLASS(gemmOp(arguments));
+}
+
 void batch_matmul_host_4bit(
     const Int4Storage **A,
     const Int4Storage **B,

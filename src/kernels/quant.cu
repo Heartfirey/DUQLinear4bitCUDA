@@ -237,3 +237,87 @@ void asym_batch_dequant_host(
                                                           scale_col, zeros_col, 
                                                           batches, rows, cols, x);
 }
+
+constexpr int32_t qmin_asym_8bit = 0;
+constexpr int32_t qmax_asym_8bit = 126;
+
+__global__
+void asym_quantize_f16_i8_kernel(
+    const half *__restrict__ x,
+    const half *__restrict__ scale,
+    const half *__restrict__ zeros,
+    uint32_t rows,
+    uint32_t cols,
+    int8_t *__restrict__ q
+)
+{
+    uint32_t row = threadIdx.y + blockIdx.y * blockDim.y;
+    uint32_t col = threadIdx.x + blockIdx.x * blockDim.x;
+    if (row >= rows || col >= cols)
+    {
+        return;
+    }
+
+    uint32_t id = col + row * cols;
+    half data = __hdiv(x[id], scale[row]);
+    int qval = clamp(__half2int_rn(data) + __half2int_rn(zeros[row]), qmin_asym_8bit, qmax_asym_8bit);
+    q[id] = qval;
+}
+
+void asym_quant_host_8bit(
+    const half *x,
+    const half *scale,
+    const half *zeros,
+    uint32_t rows,
+    uint32_t cols,
+    int8_t *q 
+)
+{
+    dim3 block{std::min<uint32_t>(cols, 16), std::min<uint32_t>(rows, 16)};
+    dim3 grid{cdiv(cols, block.x), cdiv(rows, block.y)};
+    asym_quantize_f16_i8_kernel<<<grid, block>>>(x, scale, zeros, rows, cols, q);
+}
+
+__global__
+void asym_dequantize_i32_f16_hp_kernel(
+    const int32_t *__restrict__ q,
+    const half *__restrict__ scale_row,
+    const half *__restrict__ zeros_row,
+    const half *__restrict__ scale_col,
+    const half *__restrict__ zeros_col,
+    uint32_t rows,
+    uint32_t cols,
+    half *__restrict__ x
+)
+{
+    uint32_t row = threadIdx.y + blockIdx.y * blockDim.y;
+    uint32_t col = threadIdx.x + blockIdx.x * blockDim.x;
+    if (col >= cols || row >= rows)
+    {
+        return;
+    }
+
+    float xElementF = (float)(q[col + row * cols]);
+    float scales = __half2float(scale_row[row]) * __half2float(scale_col[col]);
+    float zeros = __half2float(zeros_row[row]) + __half2float(zeros_col[col]);
+    x[col + row * cols] = __float2half(scales * (xElementF - zeros));
+}
+
+void asym_dequant_host_hprec(
+    const int32_t *q,
+    const half *scale_row,
+    const half *zeros_row,
+    const half *scale_col,
+    const half *zeros_col,
+    uint32_t rows,
+    uint32_t cols,
+    half *x
+)
+{
+    dim3 block{std::min<uint32_t>(cols, 16), std::min<uint32_t>(rows, 16)};
+    dim3 grid{cdiv(cols, block.x), cdiv(rows, block.y)};
+    asym_dequantize_i32_f16_hp_kernel<<<grid, block>>>(q, 
+                                                        scale_row, zeros_row, 
+                                                        scale_col, zeros_col, 
+                                                        rows, cols, x);
+}

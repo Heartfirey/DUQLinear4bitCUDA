@@ -4,7 +4,8 @@
 #include <gemm.h>
 #include <quant.h>
 #include <flashinfer.h>
-
+#include <vector>
+#include <iostream>
 
 torch::Tensor matmul(const torch::Tensor &A, const torch::Tensor &B)
 {
@@ -24,28 +25,63 @@ torch::Tensor matmul(const torch::Tensor &A, const torch::Tensor &B)
     return C;
 }
 
-// torch::Tensor batched_matmul(const torch::Tensor &A, const torch::Tensor &B)
-// {
-//     torch::checkAllContiguous("batched_matmul", {{A, "A", 0},
-//                                                  {B, "B", 1}});
-//     torch::checkDeviceType("batched_matmul", {A, B}, at::DeviceType::CUDA);
-//     torch::checkAllSameGPU("batched_matmul", {{A, "A", 0},
-//                                               {B, "B", 1}});
-//     uint32_t batch_count = A.size(0);
-//     uint32_t M = A.size(1);
-//     uint32_t N = B.size(1);
-//     uint32_t K = A.size(2) * kElementsPerVector;  // 4bit packing is on the columns
-//     auto C = torch::empty({batch_count, M, N}, torch::dtype(torch::kInt32).device(A.device()));
+torch::Tensor matmul_8bit(const torch::Tensor &A, const torch::Tensor &B)
+{
+    torch::checkAllContiguous("matmul_8bit", {{A, "A",       0},
+                                                {B, "B", 1}});
+    torch::checkDeviceType("matmul_8bit", {A, B}, at::DeviceType::CUDA);
 
-//     batch_matmul_host_4bit(
-//         A.data_ptr<Int4Storage>(), 
-//         B.data_ptr<Int4Storage>(), 
-//         M, N, K, 
-//         C.data_ptr<int32_t>(), 
-//         batch_count
-//     );
-//     return C;
-// }
+    torch::checkAllSameGPU("matmul_8bit", {{A, "A",       0},
+                                          {   B, "B", 1}});
+    uint32_t M = A.size(0);
+    uint32_t N = B.size(0);
+    uint32_t K = A.size(1);
+    auto C = torch::empty({M, N}, torch::dtype(torch::kInt32).device(A.device()));
+
+    matmul_host_8bit(A.data_ptr<int8_t>(), B.data_ptr<int8_t>(), M, N, K, C.data_ptr<int32_t>());
+
+    return C;
+}
+
+torch::Tensor batched_matmul(const torch::Tensor &A, const torch::Tensor &B)
+{
+    torch::checkAllContiguous("batched_matmul", {{A, "A", 0},
+                                                 {B, "B", 1}});
+    torch::checkDeviceType("batched_matmul", {A, B}, at::DeviceType::CUDA);
+    torch::checkAllSameGPU("batched_matmul", {{A, "A", 0},
+                                              {B, "B", 1}});
+    uint32_t batch_count = A.size(0);
+    uint32_t M = A.size(1);
+    uint32_t N = B.size(1);
+    uint32_t K = A.size(2) * kElementsPerVector;  // 4bit packing is on the columns
+    auto C = torch::empty({batch_count, M, N}, torch::dtype(torch::kInt32).device(A.device()));
+
+    std::vector<const Int4Storage*> A_ptrs(batch_count);
+    std::vector<const Int4Storage*> B_ptrs(batch_count);
+    std::vector<int32_t *> C_ptrs(batch_count);
+
+    const Int4Storage* A_data = A.data_ptr<Int4Storage>();
+    const Int4Storage* B_data = B.data_ptr<Int4Storage>();
+    int32_t *C_data = C.data_ptr<int32_t>();
+
+    for (uint32_t i = 0; i < batch_count; i++) {
+        A_ptrs[i] = A_data + i * M * (K / kElementsPerVector);
+        B_ptrs[i] = B_data + i * N * (K / kElementsPerVector);
+        C_ptrs[i] = C_data + i * M * N;
+    }
+
+    std::cout << "batch_count: " << batch_count << std::endl;
+    std::cout << "RUNNING BATCHED MATMUL" << std::endl;
+
+    batch_matmul_host_4bit(
+        (const Int4Storage **)A_ptrs.data(), 
+        (const Int4Storage **)B_ptrs.data(),
+        M, N, K, 
+        C_ptrs.data(), 
+        batch_count
+    );
+    return C;
+}
 
 // ===== Sym Quant/Dequant ======
 
@@ -206,6 +242,29 @@ torch::Tensor asym_quant(
     return q;
 }
 
+torch::Tensor asym_quant_8bit(
+    const torch::Tensor &x,
+    const torch::Tensor &scale, const torch::Tensor &zeros
+)
+{
+    torch::checkAllContiguous("asym_quant_8bit", {{x,     "x",     0},
+                                             {scale, "scale", 1}, {zeros, "zeros", 2}});
+    torch::checkDeviceType("asym_quant_8bit", {x, scale, zeros}, at::DeviceType::CUDA);
+    torch::checkSameGPU("asym_quant_8bit", {x, "x", 0}, {scale, "scale", 1});
+    torch::checkSameGPU("asym_quant_8bit", {x, "x", 0}, {zeros, "zeros", 2});
+    torch::checkSize("asym_quant_8bit", torch::TensorArg{scale, "scale", 1}, 0, x.size(0));
+    torch::checkSize("asym_quant_8bit", torch::TensorArg{zeros, "zeros", 2}, 0, x.size(0));
+
+    uint32_t rows = x.size(0);
+    uint32_t cols = x.size(1);
+
+    auto q = torch::empty({rows, cols}, torch::dtype(torch::kInt8).device(x.device()));
+
+    asym_quant_host_8bit((half*)x.data_ptr(), (half*)scale.data_ptr(), (half*)zeros.data_ptr(), rows, cols, q.data_ptr<int8_t>());
+
+    return q;
+}
+
 torch::Tensor asym_dequant(
     const torch::Tensor &q,
     const torch::Tensor &scale_row, const torch::Tensor &zeros_row,
@@ -246,6 +305,48 @@ torch::Tensor asym_dequant(
 
     return x;
 }
+
+torch::Tensor asym_dequant_hprec(
+    const torch::Tensor &q,
+    const torch::Tensor &scale_row, const torch::Tensor &zeros_row,
+    const torch::Tensor &scale_col, const torch::Tensor &zeros_col,
+    const int bits
+)
+{
+    torch::checkAllContiguous("asym_dequant_hprec", {{q,       "q",        0},
+                              {scale_row, "scale_row", 1}, {zeros_row, "zeros_row", 2},
+                              {scale_col, "scale_col", 3}, {zeros_col, "zeros_col", 4}});
+    torch::checkDeviceType("asym_dequant_hprec", {q, scale_row, zeros_row, scale_col, zeros_col}, 
+                            at::DeviceType::CUDA);
+    torch::checkAllSameGPU("asym_dequant_hprec", {{q, "q", 0}, 
+                         {scale_row, "scale_row", 1}, {zeros_row, "zeros_row", 2},
+                         {scale_col, "scale_col", 3}, {zeros_col, "zeros_col", 4}});
+
+    uint32_t rows = q.size(0);
+    uint32_t cols = q.size(1);
+
+    torch::checkSize("asym_dequant_hprec", torch::TensorArg{scale_row, "scale_row", 1}, 0, rows);
+    torch::checkSize("asym_dequant_hprec", torch::TensorArg{zeros_row, "zeros_row", 2}, 0, rows);
+    torch::checkSize("asym_dequant_hprec", torch::TensorArg{scale_col, "scale_col", 3}, 0, cols);
+    torch::checkSize("asym_dequant_hprec", torch::TensorArg{zeros_col, "zeros_col", 4}, 0, cols);
+
+    auto x = torch::empty(q.sizes(), torch::dtype(torch::kHalf).device(q.device()));
+
+    switch (bits)
+    {
+        case 32:
+            asym_dequant_host_hprec(q.data_ptr<int32_t>(), 
+                                    (half*)scale_row.data_ptr(), (half*)zeros_row.data_ptr(),
+                                    (half*)scale_col.data_ptr(), (half*)zeros_col.data_ptr(),
+                                    rows, cols, (half*)x.data_ptr());
+            break;
+        default:
+            TORCH_CHECK(false, "Unsupported data type")
+    }
+
+    return x;
+}
+
 
 torch::Tensor asym_batch_dequant(
     const torch::Tensor &q,
@@ -675,6 +776,20 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m
           "output = int4Unpacking(A) @ int4Unpacking(B)^T",
           py::arg("A"), py::arg("B"));
 
+    m.def("matmul_8bit", &matmul_8bit,
+          "input: (A: torch.Tensor(M x K, UINT8, CUDA), B: torch.Tensor(N x K, "
+          "UINT8, CUDA))\n"
+          "output: torch.Tensor(M x N, INT32, CUDA)\n"
+          "output = int4Unpacking(A) @ int4Unpacking(B)^T",
+          py::arg("A"), py::arg("B"));
+
+    m.def("batched_matmul", &batched_matmul,
+          "input: (A: torch.Tensor(B x M x K, UINT8, CUDA), B: torch.Tensor(B x N x K, "
+          "UINT8, CUDA))\n"
+          "output: torch.Tensor(B x M x N, INT32, CUDA)\n"
+          "output = int4Unpacking(A) @ int4Unpacking(B)^T",
+          py::arg("A"), py::arg("B"));
+
     m.def("sym_quant", &sym_quant,
           "input: (src: torch.Tensor(M x N, FP16, CUDA), scale: "
           "torch.Tensor(M x 1, FP16, CUDA))"
@@ -728,6 +843,13 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m
         "output = int4Packing(int4Rounding(source / scale)\n",
         py::arg("x"), py::arg("scale"), py::arg("zeros"));
 
+    m.def("asym_quant_8bit", &asym_quant_8bit,
+        "input: (src: torch.Tensor(M x N, INT8, CUDA), scale: "
+        "torch.Tensor(M x 1, FP16, CUDA), zeros: torch.Tensor(M x 1, FP16, CUDA))"
+        "output: torch.Tensor(M x ceil(N / 2), INT8, CUDA)\n"
+        "output = int4Packing(int4Rounding(source / scale)\n",
+        py::arg("x"), py::arg("scale"), py::arg("zeros"));
+
     m.def("asym_batch_dequant", &asym_batch_dequant,
         "input: (src: torch.Tensor(B x M x N, INT32, CUDA), scale_row: "
         "torch.Tensor(B x M x 1, FP16, CUDA), zeros_row: torch.Tensor(B x M x 1, FP16, CUDA), "
@@ -745,6 +867,21 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m
         py::arg("bits"));
 
     m.def("asym_dequant", &asym_dequant,
+        "input (x: torch.Tensor(M x N), scale_row: torch.Tensor(M x 1, "
+        "FP16), zeros_row: torch::Tensor(M x 1, FP16), scale_col: torch::Tensor(1 x N, FP16), zeros_col: torch::Tensor(1 x N, FP16)"
+        "bits: int\n"
+        "output: torch.Tensor(M x N, FP16)\n"
+        "output = x * scale_row * scale_col"
+        "when bits equal 8: "
+        "input x type is int8\n"
+        "when bits equal 16: "
+        "input x type is FP16\n"
+        "when bits equal 32: "
+        "input x type is int32\n",
+        py::arg("q"), py::arg("scale_row"), py::arg("zeros_row"), py::arg("scale_col"), py::arg("zeros_col"),
+        py::arg("bits"));
+
+    m.def("asym_dequant_hprec", &asym_dequant_hprec,
         "input (x: torch.Tensor(M x N), scale_row: torch.Tensor(M x 1, "
         "FP16), zeros_row: torch::Tensor(M x 1, FP16), scale_col: torch::Tensor(1 x N, FP16), zeros_col: torch::Tensor(1 x N, FP16)"
         "bits: int\n"

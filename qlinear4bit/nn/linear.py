@@ -2,7 +2,7 @@ import math
 import torch
 import qlinear4bit.tools.tensor_utils as tensor_utils
 import qlinear4bit.tools.quantization as quant_utils
-from qlinear4bit.nn.quantizer import SymQuantizer, AsymQuantizer
+from qlinear4bit.nn.quantizer import SymQuantizer, AsymQuantizer, AsymQuantizer8bit
 
 class ShapeHandler:
     def __init__(self, x: torch.Tensor):
@@ -99,7 +99,7 @@ class Linear4bitASQ(torch.nn.Module):
             self.bias = None
         
         if require_quantizer:
-            self.quantizer = AsymQuantizer(n_bits=4)
+            self.quantizer = AsymQuantizer()
     
     def forward(self, x):
         if self.require_quantizer:
@@ -234,7 +234,7 @@ class LinearQuant4bitDUASQ(torch.nn.Module):
             self.bias = None
             
         if self.require_quantizer:
-            self.quantizer = AsymQuantizer(n_bits=4)
+            self.quantizer = AsymQuantizer()
             
     def forward(self, x):
         if self.require_quantizer:
@@ -297,4 +297,72 @@ class LinearQuant4bitDUASQ(torch.nn.Module):
         return int4_linear
         
         
+class LinearQuant8bitASQ(torch.nn.Module):
+    def __init__(self,
+                 in_features,
+                 out_features,
+                 bias=False,
+                 require_quantizer=True):
+        super(LinearQuant8bitASQ, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.require_quantizer = require_quantizer
         
+        self.register_buffer('weight_scales',
+                             torch.zeros((self.out_features, 1), requires_grad=False, dtype=torch.float16))
+        self.register_buffer('weight_zeros',
+                             torch.zeros((self.out_features, 1), requires_grad=False, dtype=torch.float16))
+        self.register_buffer('weight', (torch.randint(1, 7, (self.out_features, self.in_features),
+                                                             # SubByte weight
+                                                             dtype=torch.int8, requires_grad=False)))
+        if bias:                                                        
+            self.register_buffer('bias', torch.zeros((self.out_features), dtype=torch.float16))
+        else:
+            self.bias = None
+            
+        if self.require_quantizer:
+            self.quantizer = AsymQuantizer8bit()
+    
+    def forward(self, x):
+        if self.require_quantizer:
+            x = self.quantizer(x)
+        assert type(x) == tensor_utils.PackedQuantizedTensor, \
+            "Input should be quantized tensor, or require_quantizer should be passed as initial argument"
+        x, scales_x, zeros_x = x.quantized_x, x.scales_x, x.zeros_x
+        x = tensor_utils.matmul_8bit(x, self.weight)
+        
+        if self.bias is not None:
+            return tensor_utils.asym_dequant_hprec(x, scales_x, zeros_x, self.weight_scales, self.weight_zeros) + self.bias
+        else:
+            return tensor_utils.asym_dequant_hprec(x, scales_x, zeros_x, self.weight_scales, self.weight_zeros)
+        
+    @classmethod
+    def from_linear(cls, module: torch.nn.Linear, require_quantizer=True):
+        int8_linear = cls(
+            in_features=module.in_features,
+            out_features=module.out_features,
+            bias=module.bias is not None,
+            require_quantizer=require_quantizer
+        )
+        
+        fp16_weight = module.weight.data
+        QUANT_COL = tensor_utils.get_dual_quant_col()
+        int8_quant_level = 2**7
+        
+        weight_max = torch.max(torch.abs(fp16_weight), dim=-1, keepdim=True)[0]
+        weight_min = torch.min(torch.abs(fp16_weight), dim=-1, keepdim=True)[0]
+        weight_scale = (weight_max - weight_min) / (int8_quant_level - 1)
+        weight_zeros = (-weight_min / weight_scale).round().to(torch.float16)
+        
+        # quant directly
+        int8_quant_weight = torch.clamp(torch.round(fp16_weight / weight_scale) + weight_zeros,
+                                        0, int8_quant_level - 1)
+        
+        int8_linear.weight.copy_(int8_quant_weight.to(torch.int8).cpu())
+        int8_linear.weight_scales.copy_(weight_scale.to(torch.float16))
+        int8_linear.weight_zeros.copy_(weight_zeros.to(torch.float16))
+        
+        if module.bias is not None:
+            int8_linear.bias.copy_(module.bias)
+            
+        return int8_linear

@@ -11,6 +11,15 @@ void matmul_host_4bit(
         int32_t *C
 );
 
+void matmul_host_8bit(
+        const int8_t *A,
+        const int8_t *B,
+        uint32_t M,
+        uint32_t N,
+        uint32_t K,
+        int32_t *C
+);
+
 void batch_matmul_host_4bit(
     const Int4Storage **A,
     const Int4Storage **B,
