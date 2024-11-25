@@ -309,14 +309,14 @@ class LinearQuant8bitASQ(torch.nn.Module):
         self.require_quantizer = require_quantizer
         
         self.register_buffer('weight_scales',
-                             torch.zeros((self.out_features, 1), requires_grad=False, dtype=torch.float16))
+                             torch.zeros((self.out_features, 1), requires_grad=False, dtype=torch.float32))
         self.register_buffer('weight_zeros',
-                             torch.zeros((self.out_features, 1), requires_grad=False, dtype=torch.float16))
+                             torch.zeros((self.out_features, 1), requires_grad=False, dtype=torch.float32))
         self.register_buffer('weight', (torch.randint(1, 7, (self.out_features, self.in_features),
                                                              # SubByte weight
                                                              dtype=torch.int8, requires_grad=False)))
         if bias:                                                        
-            self.register_buffer('bias', torch.zeros((self.out_features), dtype=torch.float16))
+            self.register_buffer('bias', torch.zeros((self.out_features), dtype=torch.float32))
         else:
             self.bias = None
             
@@ -352,15 +352,15 @@ class LinearQuant8bitASQ(torch.nn.Module):
         weight_max = torch.max(torch.abs(fp16_weight), dim=-1, keepdim=True)[0]
         weight_min = torch.min(torch.abs(fp16_weight), dim=-1, keepdim=True)[0]
         weight_scale = (weight_max - weight_min) / (int8_quant_level - 1)
-        weight_zeros = (-weight_min / weight_scale).round().to(torch.float16)
+        weight_zeros = (-weight_min / weight_scale).round().to(torch.float32)
         
         # quant directly
         int8_quant_weight = torch.clamp(torch.round(fp16_weight / weight_scale) + weight_zeros,
                                         0, int8_quant_level - 1)
         
         int8_linear.weight.copy_(int8_quant_weight.to(torch.int8).cpu())
-        int8_linear.weight_scales.copy_(weight_scale.to(torch.float16))
-        int8_linear.weight_zeros.copy_(weight_zeros.to(torch.float16))
+        int8_linear.weight_scales.copy_(weight_scale.to(torch.float32))
+        int8_linear.weight_zeros.copy_(weight_zeros.to(torch.float32))
         
         if module.bias is not None:
             int8_linear.bias.copy_(module.bias)

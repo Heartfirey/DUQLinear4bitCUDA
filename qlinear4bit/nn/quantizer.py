@@ -48,7 +48,7 @@ class AsymQuantizer8bit(torch.nn.Module):
         max_val, _ = x.max(dim=-1, keepdim=True)
         
         scale = (max_val - min_val) / (self.n_levels - 1)
-        zeros = (-min_val / scale).round().to(torch.float16)
+        zeros = (-min_val / scale).round().to(torch.float32)
         
         quantized_x = tensor_utils.asym_quant_8bit(x, scale, zeros)
         packed_tensor = tensor_utils.PackedQuantizedTensor(quantized_x, scale, zeros)

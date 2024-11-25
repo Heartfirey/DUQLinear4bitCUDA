@@ -67,9 +67,9 @@ void asym_dequant_host(
 );
 
 void asym_quant_host_8bit(
-    const half *x,
-    const half *scale,
-    const half *zeros,
+    const float *x,
+    const float *scale,
+    const float *zeros,
     uint32_t rows,
     uint32_t cols,
     int8_t *q 
@@ -115,11 +115,11 @@ void asym_dual_dequant_host(
 
 void asym_dequant_host_hprec(
     const int32_t *q,
-    const half *scale_row,
-    const half *zeros_row,
-    const half *scale_col,
-    const half *zeros_col,
+    const float *scale_row,
+    const float *zeros_row,
+    const float *scale_col,
+    const float *zeros_col,
     uint32_t rows,
     uint32_t cols,
-    half *x
+    float *x
 );

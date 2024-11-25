@@ -243,9 +243,9 @@ constexpr int32_t qmax_asym_8bit = 126;
 
 __global__
 void asym_quantize_f16_i8_kernel(
-    const half *__restrict__ x,
-    const half *__restrict__ scale,
-    const half *__restrict__ zeros,
+    const float *__restrict__ x,
+    const float *__restrict__ scale,
+    const float *__restrict__ zeros,
     uint32_t rows,
     uint32_t cols,
     int8_t *__restrict__ q
@@ -259,15 +259,15 @@ void asym_quantize_f16_i8_kernel(
     }
 
     uint32_t id = col + row * cols;
-    half data = __hdiv(x[id], scale[row]);
+    float data = (x[id] / scale[row]);
     int qval = clamp(__half2int_rn(data) + __half2int_rn(zeros[row]), qmin_asym_8bit, qmax_asym_8bit);
     q[id] = qval;
 }
 
 void asym_quant_host_8bit(
-    const half *x,
-    const half *scale,
-    const half *zeros,
+    const float *x,
+    const float *scale,
+    const float *zeros,
     uint32_t rows,
     uint32_t cols,
     int8_t *q 
@@ -281,13 +281,13 @@ void asym_quant_host_8bit(
 __global__
 void asym_dequantize_i32_f16_hp_kernel(
     const int32_t *__restrict__ q,
-    const half *__restrict__ scale_row,
-    const half *__restrict__ zeros_row,
-    const half *__restrict__ scale_col,
-    const half *__restrict__ zeros_col,
+    const float *__restrict__ scale_row,
+    const float *__restrict__ zeros_row,
+    const float *__restrict__ scale_col,
+    const float *__restrict__ zeros_col,
     uint32_t rows,
     uint32_t cols,
-    half *__restrict__ x
+    float *__restrict__ x
 )
 {
     uint32_t row = threadIdx.y + blockIdx.y * blockDim.y;
@@ -298,20 +298,20 @@ void asym_dequantize_i32_f16_hp_kernel(
     }
 
     float xElementF = (float)(q[col + row * cols]);
-    float scales = __half2float(scale_row[row]) * __half2float(scale_col[col]);
-    float zeros = __half2float(zeros_row[row]) + __half2float(zeros_col[col]);
-    x[col + row * cols] = __float2half(scales * (xElementF - zeros));
+    float scales = (scale_row[row]) * (scale_col[col]);
+    float zeros = (zeros_row[row]) + (zeros_col[col]);
+    x[col + row * cols] = (scales * (xElementF - zeros));
 }
 
 void asym_dequant_host_hprec(
     const int32_t *q,
-    const half *scale_row,
-    const half *zeros_row,
-    const half *scale_col,
-    const half *zeros_col,
+    const float *scale_row,
+    const float *zeros_row,
+    const float *scale_col,
+    const float *zeros_col,
     uint32_t rows,
     uint32_t cols,
-    half *x
+    float *x
 )
 {
     dim3 block{std::min<uint32_t>(cols, 16), std::min<uint32_t>(rows, 16)};
